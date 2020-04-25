@@ -8,9 +8,9 @@ class Client:
         self.local_balance = 10
         self.client_id = id
         self.blockchain = []
-        # self.local_clock = 0
-        # self.event_queue = OrderedDict()
-        # self.started = False
+        self.local_clock = 0
+        self.event_queue = OrderedDict()
+        self.started = False
 
     def get_pid(self):
         return self.client_id
@@ -35,20 +35,20 @@ class Client:
         p = [tuple("P" + str(item[i]) if i < 2 else "$" + str(item[i]) for i in range(len(item))) for item in self.blockchain]
         print(p)
 
-    # def update_events(self, event):
-    #     self.event_queue[self.local_clock] = event
-    #     self.started = True
+    def update_events(self, event):
+        self.event_queue[self.local_clock] = event
+        self.started = True
 
-    # def update_clock(self, input_counter=1):
-    #     self.local_clock = max(self.local_clock, input_counter) + 1
+    def update_clock(self, input_counter=1):
+        self.local_clock = max(self.local_clock, input_counter) + 1
 
-    # def print_clock(self):
-    #     if not self.started:
-    #         print("0")
-    #     else:
-    #         #all_event = [str(i) for i in [*self.event_queue].sort()]
-    #         print("P{} clock:".format(self.client_id))
-    #         for e in self.event_queue:
-    #             print("[", e, "]", self.event_queue[e])
-    #     return self.event_queue
+    def print_clock(self):
+        if not self.started:
+            print("0")
+        else:
+            #all_event = [str(i) for i in [*self.event_queue].sort()]
+            print("P{} clock:".format(self.client_id))
+            for e in self.event_queue:
+                print("[", e, "]", self.event_queue[e])
+        return self.event_queue
 
