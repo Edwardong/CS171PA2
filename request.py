@@ -11,8 +11,8 @@ class Request:
     def init_local_set(self):
         self.local_set = set([self.sender_pid])
 
-    def get_amount(self):
-        return self.local_amount
+    # def get_amount(self):
+    #    return self.local_amount
 
     def get_sender_pid(self):
         return self.sender_pid

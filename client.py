@@ -12,7 +12,8 @@ class Client:
         self.local_clock = 0
         self.event_queue = OrderedDict()
         self.started = False
-        self.one_transcation = []
+        #for testing
+        self.one_transcation = [1,2,7]
         self.one_request = Request(0, self.client_id)
 
     def get_pid(self):
@@ -75,3 +76,5 @@ class Client:
                 print("[", e, "]", self.event_queue[e])
         return self.event_queue
 
+    def print_set(self):
+        print(self.one_request.get_local_set())
