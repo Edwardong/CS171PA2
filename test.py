@@ -1,6 +1,7 @@
 from client import Client
 from request import Request
-from queue import PriorityQueue
+import queue
+
 
 if __name__ == '__main__':
     # test_client = Client(3)
@@ -11,8 +12,8 @@ if __name__ == '__main__':
     #     print("fail")
     #     test_client.print_balance()
 
-    #test = (1, 2, 3, 4, 5)
-    #p = [tuple("P" + str(test[i]) for i in range(len(test)))]
+    # test = (1, 2, 3, 4, 5)
+    # p = [tuple("P" + str(test[i]) for i in range(len(test)))]
     # test2 = [(1, 2, 5), (2, 3, 7)]
     # p = [tuple("P" + str(item[i]) if i < 2 else "$" + str(item[i]) for i in range(len(item)))  for item in test2]
     # print(p)
@@ -30,3 +31,36 @@ if __name__ == '__main__':
     # while not PQueue.empty():
     #     next = PQueue.get()
     #     print('clock: {}, sender pid: {}'.format(next.local_clock, next.sender_pid))
+
+    # seta = set()
+    # seta.add(1)
+    # seta.add(3)
+    # seta.add(2)
+    #
+    # setb = set()
+    # setb.add(2)
+    # setb.add(3)
+    # setb.add(1)
+    #
+    # print(seta == setb)
+
+    # queue = queue.Queue()
+    # request1 = Request(2,1)
+    # request2 = Request(4,1)
+    # queue.put(request1)
+    # queue.put(request2)
+    #
+    # queue.queue[0].update_local_set(2)
+    # queue.queue[0].update_local_set(3)
+    #
+    # print(queue.queue[0].get_local_set())
+
+    client = Client(1)
+    #client.print_clock()
+    client.update_clock(0)
+    print(client.get_clock())
+    client.get_request().update_local_set(2)
+    print(client.get_request().get_local_set())
+    client.get_request().init_local_set()
+    print(client.get_request().get_local_set())
+    #client.print_clock()

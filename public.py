@@ -2,6 +2,7 @@ P1PORT = 5001
 P2PORT = 5002
 P3PORT = 5003
 NETWORK_PORT = 5006
+GLOBALSET = set([1,2,3])
 
 def process_str(msg):
     sender_index = msg.find("P")

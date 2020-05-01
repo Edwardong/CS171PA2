@@ -6,10 +6,13 @@ import socket
 import time
 import sys
 from client import Client
-from public import P1PORT, P2PORT, P3PORT, NETWORK_PORT, process_str
+from public import P1PORT, P2PORT, P3PORT, GLOBALSET, NETWORK_PORT, process_str
+from request import Request
 
 shared_queue = queue.Queue()
-msg_queue = queue.Queue()
+P_queue = queue.PriorityQueue()
+request_queue = queue.Queue()
+transaction_queue = queue.Queue()
 
 """ input format:
     local event_name
@@ -75,23 +78,95 @@ def start_process(this_client, stop_signal):
         # for debugging
         # print("{} has poped from the shared queue: {}\n".format(one_event,shared_queue.queue))
 
-        if one_event[:5] == "local":  # e.g. local Wakeup
-            # where = "local"
-            event = one_event[6:]
+        if one_event[:8] == "transfer":  # e.g. transfer p2 3
+            event = one_event
+            receiver = event[9:].split()[0]
+            amount = int(event[9:].split()[1])
             this_client.update_clock(0)
-            this_client.update_events("local: " + event)
-        elif one_event[:4] == "send":
-            # where = "remote"
-            receiver = one_event[5:7]
-            message = one_event[8:]
+            if not this_client.check_valid(-amount):
+                this_client.update_events(event+" failed")
+                print("You don't have enough balance")
+            else:
+                #this_client.update_events(event)
+
+                print("requesting")
+                this_client.update_clock(0)
+                this_client.set_request()
+                #request = Request(this_client.get_clock(),this_client.get_pid())
+                P_queue.put(this_client.get_request())
+                this_client.set_transaction(receiver,amount)
+                #request_queue.put(this_client.get_request())
+
+                # TO-DO: send the request to Network node and Network node would broadcast
+                # TO-DO: send_request(request)
+
+
+        elif one_event[:5] == "reply":
+            # 这里是我收到了 "reply", 我是原本发 "request" 的人
+            # format: reply Pn Pm Clock (Pn is the one receives "request" and sends back "reply")
+            event = one_event.split()
+            from_pid = event[1]
+            remote_clock = int(event[3])
+            this_client.update_clock(remote_clock)
+            this_client.update_events("receive reply from " + from_pid)
+            this_client.get_request().update_local_set(int(from_pid[-1]))
+
+        elif one_event[:7] == "request":
+            # format: request Pn Clock
+            event = one_event.split()
+            requester_pid = event[1]
+            requester_clock = int(event[2])
+            this_client.update_clock(requester_clock)
+            this_client.update_events("receive request from " + requester_pid)
+
+            new_request = Request(requester_clock, requester_pid)
+            P_queue.put(new_request)
+
+            # TO-DO: send "reply" msg back to the sender
             this_client.update_clock(0)
-            this_client.update_events("send " + receiver + ": " + message)
-            send_msg("localhost", NETWORK_PORT, this_client.get_clock(), message, this_client.get_pid(), receiver)
-        elif one_event[:4] == "recv":
-            clock, sender, receiver, message = process_str(one_event[5:])
-            this_client.update_clock(clock)
-            this_client.update_events("receive " + sender + ": " + message)
-            
+            send_reply(this_client.get_clock(), this_client.get_pid())
+
+            #send_msg("localhost", NETWORK_PORT, this_client.get_clock(), message, this_client.get_pid(), receiver)
+
+        elif one_event[:7] == "release":
+            # format: release sender receiver Amount
+            this_client.update_clock(0)
+            this_client.update_events("release resource")
+            event = one_event.split()
+            amount = int(event[3])
+            this_client.update_blockchain(((int(event[1][-1])),(int(event[2][-1])),amount))
+
+            if int(event[2][-1]) == this_client.get_pid():
+                this_client.update_balance(amount)
+            P_queue.get()
+
+# TO-DO
+def send_request(request):
+    return
+
+# TO-DO
+def send_reply(local_clock, local_pid):
+    return
+
+def add_block_thread(this_client):
+    while True:
+        if not P_queue.queue[0].get_sender_pid() == this_client.get_pid() or not this_client.get_request().get_local_set() == GLOBALSET:
+            pass
+        else:
+            P_queue.get()
+            this_client.get_request().init_local_set()
+            transaction = this_client.get_transaction()
+            sender = transaction[0]
+            receiver = transaction[1]
+            amount = transaction[2]
+            this_client.cleanup_one_transaction()
+            if this_client.update_balance(-amount):
+                pass
+            else:
+                print("invalid transaction")
+            msg = "release p" + sender + " " + receiver + str(amount)
+            # TO-DO: broadcast msg: "release sender_pid receiver_pid amount"
+
 
 def send_msg(host, port, local_clock, msg, sender, receiver):
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -145,9 +220,12 @@ if __name__ == '__main__':
     while True:
         one_event = input()
         if one_event[:5] == "print":
-            this_client.print_clock()
-        elif one_event[:4] == "send" and int(one_event[6]) > 3:
-            print("Invalid receiver! Please enter a valid receiver(1~3) again")
+            if one_event[6:11] == "block":
+                this_client.print_blockchain()
+            else:
+                this_client.print_balance()
+        # elif one_event[:4] == "send" and int(one_event[6]) > 3:
+        #     print("Invalid receiver! Please enter a valid receiver(1~3) again")
         elif one_event[:4] == "quit":
             break
         else:

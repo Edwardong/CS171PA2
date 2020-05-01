@@ -1,5 +1,6 @@
 from typing import Dict, Any
 from collections import OrderedDict
+from request import Request
 
 class Client:
     #event_queue: OrderedDict[int, str]
@@ -11,9 +12,22 @@ class Client:
         self.local_clock = 0
         self.event_queue = OrderedDict()
         self.started = False
+        self.one_transcation = []
+        self.one_request = Request(0, self.client_id)
 
     def get_pid(self):
         return self.client_id
+
+    def get_transaction(self):
+        return self.one_transcation
+
+    def set_transaction(self, receiver, amount):
+        self.one_transcation.append(self.client_id)
+        self.one_transcation.append(receiver)
+        self.one_transcation.append(amount)
+
+    def cleanup_one_transaction(self):
+        self.one_transcation = []
 
     def check_valid(self, input):
         return (self.local_balance + input) >= 0
@@ -28,16 +42,25 @@ class Client:
     def print_balance(self):
         print("${}".format(self.local_balance))
 
+    def get_request(self):
+        return self.one_request
+
+    def set_request(self):
+        self.one_request = Request(self.local_clock, self.client_id)
+
     def update_blockchain(self, transaction):
         self.blockchain.append(transaction)
 
-    def print_blocakchain(self):
+    def print_blockchain(self):
         p = [tuple("P" + str(item[i]) if i < 2 else "$" + str(item[i]) for i in range(len(item))) for item in self.blockchain]
         print(p)
 
     def update_events(self, event):
         self.event_queue[self.local_clock] = event
         self.started = True
+
+    def get_clock(self):
+        return self.local_clock
 
     def update_clock(self, input_counter=1):
         self.local_clock = max(self.local_clock, input_counter) + 1
