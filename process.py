@@ -148,8 +148,10 @@ def send_request(request):
 def send_reply(local_clock, local_pid):
     return
 
-def add_block_thread(this_client):
+def add_block(this_client):
     while True:
+        if P_queue.empty():
+            continue
         if not P_queue.queue[0].get_sender_pid() == this_client.get_pid() or not this_client.get_request().get_local_set() == GLOBALSET:
             pass
         else:
@@ -216,6 +218,8 @@ if __name__ == '__main__':
     process_thread.start()
     listen_thread = threading.Thread(target=start_listen, args=(port, lambda: listen_stop))
     listen_thread.start()
+    add_block_thread = threading.Thread(target=add_block, args=(this_client, ))
+    add_block_thread.start()
 
     while True:
         one_event = input()
@@ -236,6 +240,7 @@ if __name__ == '__main__':
     print("stop tracking keyboard input, trying to join process_thread")
     process_stop = True
     process_thread.join()
+    add_block_thread.join()
 
     listen_stop = True
     print("trying to join listen_thread")
