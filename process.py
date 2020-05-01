@@ -11,8 +11,8 @@ from request import Request
 
 shared_queue = queue.Queue()
 P_queue = queue.PriorityQueue()
-request_queue = queue.Queue()
-transaction_queue = queue.Queue()
+# request_queue = queue.Queue()
+# transaction_queue = queue.Queue()
 
 """ input format:
     local event_name
