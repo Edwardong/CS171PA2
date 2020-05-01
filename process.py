@@ -85,15 +85,16 @@ def start_process(this_client, stop_signal):
             amount = int(event[9:].split()[1])
             this_client.update_clock(0)
             if not this_client.check_valid(-amount):
-                this_client.update_events(event+" failed")
+                this_client.update_events("failed to " + event)
                 print("You don't have enough balance")
         #this part ↑ has been tested
             # TO-DO: test after implementing send_request()
             else:
                 #this_client.update_events(event)
-
+                this_client.update_events(event)
                 print("requesting")
                 this_client.update_clock(0)
+                this_client.update_events("sending request")
                 this_client.set_request()
                 #request = Request(this_client.get_clock(),this_client.get_pid())
                 P_queue.put(this_client.get_request())
@@ -138,16 +139,21 @@ def start_process(this_client, stop_signal):
 
         # this part ↓ has been tested
         elif one_event[:7] == "release":
-            # format: release sender receiver Amount
+            # format: release sender receiver Clock Amount
             this_client.update_clock(0)
             this_client.update_events("release resource")
             event = one_event.split()
-            amount = int(event[3])
-            this_client.update_blockchain(((int(event[1][-1])),(int(event[2][-1])),amount))
+            sender = int(event[1][-1])
+            amount = int(event[4])
+            clock = int(event[4])
+            this_client.update_clock(clock)
+            this_client.update_events("receive release from " + sender )
+            this_client.update_blockchain((sender,(int(event[2][-1])),amount))
 
             if int(event[2][-1]) == this_client.get_pid():
                 this_client.update_balance(amount)
             P_queue.get()
+
         # this part ↑ has been tested
 
 # TO-DO
