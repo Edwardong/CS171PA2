@@ -113,6 +113,7 @@ def start_process(this_client, stop_signal):
             this_client.update_events("receive reply from " + from_pid)
             this_client.get_request().update_local_set(int(from_pid[-1]))
 
+        # this part ↓ has been tested
         elif one_event[:7] == "request":
             # format: request Pn Clock
             event = one_event.split()
@@ -124,8 +125,11 @@ def start_process(this_client, stop_signal):
             new_request = Request(requester_clock, requester_pid)
             P_queue.put(new_request)
 
-            # TO-DO: send "reply" msg back to the sender
+
             this_client.update_clock(0)
+            this_client.update_events("send back one reply")
+        # this part ↑ has been tested
+            # TO-DO: send "reply" msg back to the sender
             send_reply(this_client.get_clock(), this_client.get_pid())
 
             #send_msg("localhost", NETWORK_PORT, this_client.get_clock(), message, this_client.get_pid(), receiver)
