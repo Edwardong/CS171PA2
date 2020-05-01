@@ -78,6 +78,7 @@ def start_process(this_client, stop_signal):
         # for debugging
         # print("{} has poped from the shared queue: {}\n".format(one_event,shared_queue.queue))
 
+        #this part ↓ has been tested
         if one_event[:8] == "transfer":  # e.g. transfer p2 3
             event = one_event
             receiver = event[9:].split()[0]
@@ -86,6 +87,7 @@ def start_process(this_client, stop_signal):
             if not this_client.check_valid(-amount):
                 this_client.update_events(event+" failed")
                 print("You don't have enough balance")
+        #this part ↑ has been tested
             else:
                 #this_client.update_events(event)
 
@@ -224,9 +226,11 @@ if __name__ == '__main__':
     while True:
         one_event = input()
         if one_event[:5] == "print":
-            if one_event[6:11] == "block":
+            if one_event[6:] == "blockchain":
                 this_client.print_blockchain()
-            else:
+            elif one_event[6:] == "clock":
+                this_client.print_clock()
+            elif one_event[6:] == "balance":
                 this_client.print_balance()
         # elif one_event[:4] == "send" and int(one_event[6]) > 3:
         #     print("Invalid receiver! Please enter a valid receiver(1~3) again")
