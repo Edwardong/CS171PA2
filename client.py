@@ -1,9 +1,8 @@
 from typing import Dict, Any
 from collections import OrderedDict
 from request import Request
-from public import PORTS
+from public import PORTS, NETWORK_PORT, N
 import socket
-from public import N
 
 class Client:
     # event_queue: OrderedDict[int, str]
@@ -24,7 +23,7 @@ class Client:
     #     return self.pid
 
 
-    # Mutex request functions
+    """ Mutex request functions """
 
     def get_request(self):
         return self.one_request
@@ -57,7 +56,8 @@ class Client:
     #         return False
 
     def print_balance(self):
-        print("P1 ${} | P2 ${} | P3 ${}".format(*self.balances))
+        # print("P1 ${} | P2 ${} | P3 ${}".format(*self.balances))
+        print('${}'.format(self.balances[self.pid]))
 
     def update_blockchain(self, transaction):
         self.blockchain.append(transaction)
@@ -65,13 +65,10 @@ class Client:
         self.balances[transaction[1]] += transaction[2]
 
     def print_blockchain(self):
-        if len(self.blockchain) == 0:
-            print("empty blockchain")
-        for item in self.blockchain:
-            print("P{} -> P{} ${}".format(*item))
+        print( [ "P{} -> P{} ${}".format(item[0]+1, item[1]+1, item[2]) for item in self.blockchain])
 
 
-    # Lamport Clock functions
+    """ Lamport Clock functions """
 
     # Why we have to keep track of the events?
     def update_events(self, event):
@@ -98,12 +95,16 @@ class Client:
         print(self.one_request.get_local_set())
 
 
-    # Communication
+    """ Communication functions """
     
     def send_msg(self, receiver, payload):
         """ General purpose sender """
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.connect(('localhost', PORTS[receiver])) # safe
+        # Communicate without network
+        # s.connect(('localhost', PORTS[receiver])) # safe
+        # Communicate through network
+        s.connect(('localhost', NETWORK_PORT)) # safe
+
         msg = {
             'clock': self.local_clock,
             'sender': self.pid,

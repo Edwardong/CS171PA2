@@ -5,8 +5,9 @@ import queue
 import socket
 import time
 import sys
+import pickle
 from client import Client
-from public import P1PORT, P2PORT, P3PORT, PORTS, N, GLOBALSET, NETWORK_PORT, process_str
+from public import P1PORT, P2PORT, P3PORT, PORTS, N, NETWORK_PORT, process_str
 from request import Request
 
 shared_queue = queue.Queue() # event queue
@@ -34,7 +35,6 @@ def start_listen(port, stop_signal):
             c, addr = s.accept()
             data = c.recv(1024)
             # Read data
-            import pickle
             msg = pickle.loads(data)
             # print("msg received", msg)
             event = {
@@ -67,11 +67,17 @@ def start_process(this_client, stop_signal):
         # for debugging
         # print("{} has poped from the shared queue: {}\n".format(one_event,shared_queue.queue))
 
-        #this part ↓ has been tested
+
         if one_event['type'] == "transfer":  # e.g. transfer 1 3
             this_client.update_clock(0)
             this_client.update_events("transfer")
-            receiver = int(one_event['args'][0])
+            
+            # Read args: receiver and amount
+            arg_receiver = one_event['args'][0]
+            if len(arg_receiver) == 1: # pid 0 format
+                receiver = int(arg_receiver)
+            else: # P1 format
+                receiver = int(arg_receiver[1:]) - 1
             amount = int(one_event['args'][1])
 
             # Check pending transaction
@@ -86,12 +92,11 @@ def start_process(this_client, stop_signal):
                 print("Failure: You don't have enough balance")
                 continue
         
-            #this part ↑ has been tested
             
             this_client.one_transaction = [this_client.pid, receiver, amount]
 
             # Create request
-            print("requesting")
+            print("Requesting.")
             this_client.update_clock(0)
             this_client.update_events("sending request")
             #request = Request(this_client.local_clock,this_client.pid)
@@ -108,7 +113,7 @@ def start_process(this_client, stop_signal):
                     })
 
 
-        # this part ↓ has been tested
+
         elif one_event['type'] == "reply":
             # 这里是我收到了 "reply", 我是原本发 "request" 的人
             # format: reply Pn Pm Clock (Pn is the one receives "request" and sends back "reply")
@@ -117,7 +122,6 @@ def start_process(this_client, stop_signal):
             this_client.update_clock(one_event['foreign_clock'])
             this_client.update_events("receive reply from " + str(sender))
             this_client.get_request().update_local_set(sender)
-        # this part ↑ has been tested
 
             # If there's a held-reply for that process, sent it 
             for index, request in enumerate(this_client.held_replies):
@@ -133,8 +137,6 @@ def start_process(this_client, stop_signal):
             try_visit_mutex(this_client)
 
 
-
-        # this part ↓ has been tested
         elif one_event['type'] == "request":
             # format: request Pn Clock
             requester_pid = one_event['sender']
@@ -155,9 +157,9 @@ def start_process(this_client, stop_signal):
                 this_client.send_msg(requester_pid, {'type': 'reply'})
 
 
-        # this part ↓ has been tested
         elif one_event['type'] == "release":
             # format: release sender receiver Clock Amount
+            print("Releasing.")
             this_client.update_clock(one_event['foreign_clock'])
             this_client.update_events("receive release")
             
@@ -166,7 +168,6 @@ def start_process(this_client, stop_signal):
         
             try_visit_mutex(this_client)
 
-        # this part ↑ has been tested
             
         elif one_event['type'] == "looptest":
             this_client.update_clock(0)
@@ -224,8 +225,7 @@ if __name__ == '__main__':
     process_thread.start()
     listen_thread = threading.Thread(target=start_listen, args=(port, lambda: listen_stop))
     listen_thread.start()
-    # add_block_thread = threading.Thread(target=add_block, args=(this_client, lambda: process_stop))
-    # add_block_thread.start()
+
 
     while True:
         one_event = input().split()
@@ -251,14 +251,12 @@ if __name__ == '__main__':
             })
             # for debugging
             # print("{} has appended in the shared queue: {}\n".format(one_event,shared_queue.queue))
-    # for debugging
+    
     print("stop tracking keyboard input, trying to join process_thread")
     process_stop = True
     process_thread.join()
-    # add_block_thread.join()
-
-    listen_stop = True
     print("trying to join listen_thread")
+    listen_stop = True
     listen_thread.join()
     exit()
 
