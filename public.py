@@ -1,8 +1,11 @@
 P1PORT = 5001
 P2PORT = 5002
 P3PORT = 5003
+PORTS = [P1PORT, P2PORT, P3PORT]
+N = 3 # number of processes
+
 NETWORK_PORT = 5006
-GLOBALSET = set([1,2,3])
+# GLOBALSET = set([1,2,3])
 
 def process_str(msg):
     sender_index = msg.find("P")

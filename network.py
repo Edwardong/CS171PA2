@@ -1,5 +1,6 @@
 import socket, threading, time, random
-from public import P1PORT, P2PORT, P3PORT, NETWORK_PORT, process_str
+from public import P1PORT, P2PORT, P3PORT, PORTS, NETWORK_PORT, process_str
+import pickle
 
 # protocol(for easily parsing):
     # ClockreceiveSenderReceiverMsg
@@ -14,26 +15,18 @@ if __name__ == '__main__':
 
     def send(data):
         data_copy = data # not sure if necessary
-        clock, sender, receiver, message = process_str(data_copy.decode('utf-8'))
-        if receiver == "P1":
-            receiver_port = P1PORT
-        elif receiver == "P2":
-            receiver_port = P2PORT
-        elif receiver == "P3":
-            receiver_port = P3PORT
-        time.sleep(random.random() * 1 + 4)
+        msg = pickle.loads(data)
+        receiver_port = PORTS[msg['receiver']]
+        time.sleep(1)
         out_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         out_sock.connect(("localhost", receiver_port)) # safe. can have multi connections
-        out_sock.sendall(data)
+        out_sock.sendall(data_copy)
         out_sock.close
     
     thread_list = []
     while(True):
         stream, addr = in_sock.accept()
-        data = stream.recv(1000)
-        # print(data)
-        #clock, sender, receiver, message = process_str(data.decode('utf-8'))
-        sendtime = time.time()
+        data = stream.recv(1024)
         t = threading.Thread(target=send, args=(data,))
         thread_list.append(t)
         t.start()

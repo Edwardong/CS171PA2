@@ -5,12 +5,13 @@ import queue
 import socket
 import time
 import sys
+import pickle
 from client import Client
-from public import P1PORT, P2PORT, P3PORT, GLOBALSET, NETWORK_PORT, process_str
+from public import P1PORT, P2PORT, P3PORT, PORTS, N, NETWORK_PORT, process_str
 from request import Request
 
-shared_queue = queue.Queue()
-P_queue = queue.PriorityQueue()
+shared_queue = queue.Queue() # event queue
+P_queue = queue.PriorityQueue() # mutex queue
 # request_queue = queue.Queue()
 # transaction_queue = queue.Queue()
 
@@ -18,27 +19,12 @@ P_queue = queue.PriorityQueue()
     local event_name
     send P_i event_name """
 
-
-# def process_str(input):
-#     rule = re.compile(r"[^a-zA-Z0-9]")
-#     message = ''
-#     if input[:5] == "local":
-#         input_list = input.strip().split()
-#         event = input[6:]
-#         for i in range(len(input_list)):
-#             input_list[i] = rule.sub('',input_list[i])
-#         return ("local", event, message)
-#     else:
-#         receiver = input[5:7]
-#         message = input[8:]
-#         return ("send", receiver, message)
-
 def start_listen(port, stop_signal):
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    # host = socket.gethostname()
     s.bind(('', port))
     s.listen(5)
     print("start listening")
+
     while True:
         if shared_queue.empty():
             if stop_signal():
@@ -48,14 +34,17 @@ def start_listen(port, stop_signal):
         try:
             c, addr = s.accept()
             data = c.recv(1024)
-            # print("can I receive data? Data: {}".format(data)) # debug
-            # print(data)
-            shared_queue.put("recv " + data.decode('utf-8'))
+            # Read data
+            msg = pickle.loads(data)
+            # print("msg received", msg)
+            event = {
+                'type': msg['payload']['type'],
+                'sender': msg['sender'],
+                'foreign_clock': msg['clock'],
+                'transaction': msg['payload'].get('transaction', None)
+            }
+            shared_queue.put(event)
             c.close()
-            # else:
-            #     print("should stop listening2")
-            #     #c.close()
-            #     break
         except Exception:
             pass
     return
@@ -78,206 +67,179 @@ def start_process(this_client, stop_signal):
         # for debugging
         # print("{} has poped from the shared queue: {}\n".format(one_event,shared_queue.queue))
 
-        #this part ↓ has been tested
-        if one_event[:8] == "transfer":  # e.g. transfer p2 3
-            event = one_event
-            receiver = event[9:].split()[0]
-            amount = int(event[9:].split()[1])
+
+        if one_event['type'] == "transfer":  # e.g. transfer 1 3
             this_client.update_clock(0)
+            this_client.update_events("transfer")
+            
+            # Read args: receiver and amount
+            arg_receiver = one_event['args'][0]
+            if len(arg_receiver) == 1: # pid 0 format
+                receiver = int(arg_receiver)
+            else: # P1 format
+                receiver = int(arg_receiver[1:]) - 1
+            amount = int(one_event['args'][1])
+
+            # Check pending transaction
+            if this_client.one_transaction:
+                this_client.update_events("failed to transfer")
+                print('Failure: There is a pending transaction.')
+                continue
+
+            # Check balance
             if not this_client.check_valid(-amount):
-                this_client.update_events("failed to " + event)
-                print("You don't have enough balance")
-        #this part ↑ has been tested
-            # TO-DO: test after implementing send_request()
-            else:
-                #this_client.update_events(event)
-                this_client.update_events(event)
-                print("requesting")
-                this_client.update_clock(0)
-                this_client.update_events("sending request")
-                this_client.set_request()
-                #request = Request(this_client.get_clock(),this_client.get_pid())
-                P_queue.put(this_client.get_request())
-                this_client.set_transaction(receiver[-1],amount)
-                #request_queue.put(this_client.get_request())
+                this_client.update_events("failed to transfer")
+                print("Failure: You don't have enough balance")
+                continue
+        
+            
+            this_client.one_transaction = [this_client.pid, receiver, amount]
 
-                # TO-DO: send the request to Network node and Network node would broadcast
-                # TO-DO: send_request(request)
+            # Create request
+            print("Requesting.")
+            this_client.update_clock(0)
+            this_client.update_events("sending request")
+            #request = Request(this_client.local_clock,this_client.pid)
+            this_client.set_request()
 
-        # this part ↓ has been tested
-        elif one_event[:5] == "reply":
+            # Add request to my P_queue
+            P_queue.put(this_client.get_request())
+
+            # Broadcast request
+            for receiver_pid in range(N):
+                if receiver_pid != this_client.pid:
+                    this_client.send_msg(receiver_pid, {
+                        'type': 'request',
+                    })
+
+
+
+        elif one_event['type'] == "reply":
             # 这里是我收到了 "reply", 我是原本发 "request" 的人
-            # format: reply Pn Pm Clock (Pn is the one receives "request" and sends back "reply")
-            event = one_event.split()
-            from_pid = event[1]
-            remote_clock = int(event[3])
-            this_client.update_clock(remote_clock)
-            this_client.update_events("receive reply from " + from_pid)
-            this_client.get_request().update_local_set(int(from_pid[-1]))
-        # this part ↑ has been tested
+            # Record this reply
+            sender = one_event['sender']
+            this_client.update_clock(one_event['foreign_clock'])
+            this_client.update_events("receive reply from " + str(sender))
+            this_client.get_request().update_local_set(sender)
 
-        # this part ↓ has been tested
-        elif one_event[:7] == "request":
-            # format: request Pn Clock
-            event = one_event.split()
-            requester_pid = event[1]
-            requester_clock = int(event[2])
+            # Try visit mutex
+            try_visit_mutex(this_client)
+
+
+        elif one_event['type'] == "request":
+            requester_pid = one_event['sender']
+            requester_clock = one_event['foreign_clock']
             this_client.update_clock(requester_clock)
-            this_client.update_events("receive request from " + requester_pid)
+            this_client.update_events("receive request from " + str(requester_pid))
 
-            new_request = Request(requester_clock, int(requester_pid[-1]))
+            new_request = Request(requester_clock, requester_pid)
             P_queue.put(new_request)
 
-
+            # Send "reply" msg back to the requester
             this_client.update_clock(0)
-            this_client.update_events("send back one reply to " + requester_pid)
-        # this part ↑ has been tested
-            # TO-DO: send "reply" msg back to the sender
-            send_reply(this_client.get_clock(), this_client.get_pid())
+            this_client.update_events("send back one reply to " + str(requester_pid))
+            this_client.send_msg(requester_pid, {'type': 'reply'})
 
-            #send_msg("localhost", NETWORK_PORT, this_client.get_clock(), message, this_client.get_pid(), receiver)
 
-        # this part ↓ has been tested
-        elif one_event[:7] == "release":
-            # format: release sender receiver Clock Amount
-            this_client.update_clock(0)
-            this_client.update_events("release resource")
-            event = one_event.split()
-            sender = int(event[1][-1])
-            amount = int(event[4])
-            clock = int(event[4])
-            this_client.update_clock(clock)
-            this_client.update_events("receive release from " + sender )
-            this_client.update_blockchain((sender,(int(event[2][-1])),amount))
-
-            if int(event[2][-1]) == this_client.get_pid():
-                this_client.update_balance(amount)
+        elif one_event['type'] == "release":
+            print("Releasing.")
+            this_client.update_clock(one_event['foreign_clock'])
+            this_client.update_events("receive release")
+            
             P_queue.get()
+            this_client.update_blockchain(one_event['transaction'])
+        
+            try_visit_mutex(this_client)
 
-        # this part ↑ has been tested
-
-# TO-DO
-def send_request(request):
-    return
-
-# TO-DO
-def send_reply(local_clock, local_pid):
-    return
-
-def add_block(this_client,stop_signal):
-    while True:
-        if stop_signal():
-            break
-        else:
-            pass
-        if P_queue.empty():
-            continue
-        if not P_queue.queue[0].get_sender_pid() == this_client.get_pid() or not this_client.get_request().get_local_set() == GLOBALSET:
-            continue
-        else:
-            # this part ↓ has been tested
-            request = P_queue.get()
-            print("After popping out the first element in P_queue: clock: {}, pid:{}".format(request.get_clock(),request.get_sender_pid()))
-            this_client.get_request().init_local_set()
-            transaction = this_client.get_transaction()
-            print("before consuming the transaction: {}".format(transaction))
-            sender = transaction[0]
-            receiver = transaction[1]
-            amount = int(transaction[2])
-            this_client.cleanup_one_transaction()
-            print("cleanup the transaction: {}".format(this_client.get_transaction()))
-            if this_client.update_balance(-amount):
-                this_client.update_blockchain(transaction)
-            else:
-                print("invalid transaction")
-            msg = "release p" + str(sender)+ " " + str(receiver) + " " + str(amount)
-            print("broadcasting message: " + msg)
-            # this part ↑ has been tested
-            # TO-DO: broadcast msg: "release sender_pid receiver_pid amount"
+            
+        elif one_event['type'] == "looptest":
+            this_client.update_clock(0)
+            this_client.update_events("looptest")
+            this_client.send_msg(this_client.pid, {'type': 'test'})
 
 
-def send_msg(host, port, local_clock, msg, sender, receiver):
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    # time.sleep(5)
-    # communication process needs these
-    # if receiver == "P1" or receiver == "p1":
-    #     port = P1PORT
-    # elif receiver == "P2" or receiver == "p2":
-    #     port = P2PORT
-    # elif receiver == "P3" or receiver == "p3":
-    #     port = P3PORT
-    # else:
-    #     print("error receiver id")
-    #     return
-    s.connect((host, port))
-    # protocol(for easily parsing):
-    # ClockreceiveSenderReceiverMsg
-    # e.g.: 3receiveP1P2LetsDance
-    payload = str(local_clock) + "receiveP" +  str(sender) + str(receiver) + msg
-    s.send(payload.encode('utf-8'))
-    print("sent.")
+def try_visit_mutex(this_client):
+    if this_client.one_request \
+    and all(this_client.one_request.local_set) \
+    and P_queue.queue[0] \
+    and P_queue.queue[0].sender == this_client.pid:
+        print('Visiting mutex.')
+        this_client.update_clock(0)
+        this_client.update_events("release and visit mutex")
+        # Release
+        for receiver_pid in range(N):
+            if receiver_pid != this_client.pid:
+                this_client.send_msg(receiver_pid, {
+                    'type': 'release',
+                    'transaction': this_client.one_transaction
+                })
+        this_client.update_blockchain(this_client.one_transaction)
+        # Clean up
+        P_queue.get()
+        this_client.one_transaction = None
+        this_client.one_request = None
+
+
+
+def parse_command(input):
+    args = input.split()
+    
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    # parser.add_argument('port',type=int)
     parser.add_argument('pid', type=int)
     arg = parser.parse_args()
-    # port = arg.port
     this_pid = arg.pid
     process_stop = False
     listen_stop = False
 
-    #for testing:
-    #P_queue.put(Request(1,"p1"))
+
     # we might not need these here
-    if this_pid == 1:
-        port = P1PORT
-    elif this_pid == 2:
-        port = P2PORT
-    elif this_pid == 3:
-        port = P3PORT
-    else:
+    try:
+        port = PORTS[this_pid]
+    except:
         print("this program doesn't support more than 3 clients. Exiting")
         exit()
+    
 
     this_client = Client(this_pid)
     process_thread = threading.Thread(target=start_process, args=(this_client, lambda: process_stop))
     process_thread.start()
     listen_thread = threading.Thread(target=start_listen, args=(port, lambda: listen_stop))
     listen_thread.start()
-    add_block_thread = threading.Thread(target=add_block, args=(this_client, lambda: process_stop))
-    add_block_thread.start()
+
 
     while True:
-        one_event = input()
-        if one_event[:5] == "print":
-            if one_event[6:] == "blockchain":
+        one_event = input().split()
+        if one_event[0] == "print":
+            if one_event[1] == "blockchain":
                 this_client.print_blockchain()
-            elif one_event[6:] == "clock":
+            elif one_event[1] == "clock":
                 this_client.print_clock()
-            elif one_event[6:] == "balance":
+            elif one_event[1] == "balance":
                 this_client.print_balance()
-            elif one_event[6:] == "set":
+            elif one_event[1] == "set":
                 this_client.print_set()
-            elif one_event[6:] == "pqueue":
-                print(P_queue.queue[0].get_clock(),P_queue.queue[0].get_sender_pid())
+            elif one_event[1] == "pqueue":
+                print(P_queue.queue[0].local_clock, P_queue.queue[0].sender)
         # elif one_event[:4] == "send" and int(one_event[6]) > 3:
         #     print("Invalid receiver! Please enter a valid receiver(1~3) again")
-        elif one_event[:4] == "quit":
+        elif one_event[0] == "quit":
             break
         else:
-            shared_queue.put(one_event)
+            shared_queue.put({
+                'type': one_event[0],
+                'args': one_event[1:]
+            })
             # for debugging
             # print("{} has appended in the shared queue: {}\n".format(one_event,shared_queue.queue))
-    # for debugging
+    
     print("stop tracking keyboard input, trying to join process_thread")
     process_stop = True
     process_thread.join()
-    add_block_thread.join()
-
-    listen_stop = True
     print("trying to join listen_thread")
+    listen_stop = True
     listen_thread.join()
     exit()
 

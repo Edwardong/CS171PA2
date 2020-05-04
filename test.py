@@ -27,11 +27,11 @@ if __name__ == '__main__':
     PQueue.put(request2)
     PQueue.put(request3)
     PQueue.put(request1)
-    print('clock: {}, sender pid: {}'.format(PQueue.queue[0].local_clock, PQueue.queue[0].sender_pid))
+    print('clock: {}, sender pid: {}'.format(PQueue.queue[0].local_clock, PQueue.queue[0].sender))
     #
     # while not PQueue.empty():
     #     next = PQueue.get()
-    #     print('clock: {}, sender pid: {}'.format(next.local_clock, next.sender_pid))
+    #     print('clock: {}, sender pid: {}'.format(next.local_clock, next.sender))
 
     # seta = set()
     # seta.add(1)
@@ -58,7 +58,7 @@ if __name__ == '__main__':
 
     # client = Client(1)
     # client.update_clock(0)
-    # print(client.get_clock())
+    # print(client.local_clock)
     # client.get_request().update_local_set(2)
     # print(client.get_request().get_local_set())
     # client.get_request().init_local_set()
