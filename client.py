@@ -17,7 +17,6 @@ class Client:
         self.started = False
         self.one_transaction = None # my pending transaction
         self.one_request = None # my request
-        self.held_replies = [] # requests held because the requester has not replied my request; list of requests
 
     # def get_pid(self):
     #     return self.pid

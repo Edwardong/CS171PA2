@@ -116,29 +116,17 @@ def start_process(this_client, stop_signal):
 
         elif one_event['type'] == "reply":
             # 这里是我收到了 "reply", 我是原本发 "request" 的人
-            # format: reply Pn Pm Clock (Pn is the one receives "request" and sends back "reply")
             # Record this reply
             sender = one_event['sender']
             this_client.update_clock(one_event['foreign_clock'])
             this_client.update_events("receive reply from " + str(sender))
             this_client.get_request().update_local_set(sender)
 
-            # If there's a held-reply for that process, sent it 
-            for index, request in enumerate(this_client.held_replies):
-                if request.sender == sender:
-                    # Let go of that reply
-                    this_client.held_replies.pop(index)
-                    this_client.update_clock(0)
-                    this_client.update_events("send back one reply to " + str(requester_pid))
-                    this_client.send_msg(sender, {'type': 'reply'})
-                    break
-    
             # Try visit mutex
             try_visit_mutex(this_client)
 
 
         elif one_event['type'] == "request":
-            # format: request Pn Clock
             requester_pid = one_event['sender']
             requester_clock = one_event['foreign_clock']
             this_client.update_clock(requester_clock)
@@ -147,18 +135,13 @@ def start_process(this_client, stop_signal):
             new_request = Request(requester_clock, requester_pid)
             P_queue.put(new_request)
 
-            # Check time, hold reply if later then my request
-            if this_client.one_request and this_client.one_request < new_request:
-                this_client.held_replies.append(new_request)
-            else:
-                # Send "reply" msg back to the requester
-                this_client.update_clock(0)
-                this_client.update_events("send back one reply to " + str(requester_pid))
-                this_client.send_msg(requester_pid, {'type': 'reply'})
+            # Send "reply" msg back to the requester
+            this_client.update_clock(0)
+            this_client.update_events("send back one reply to " + str(requester_pid))
+            this_client.send_msg(requester_pid, {'type': 'reply'})
 
 
         elif one_event['type'] == "release":
-            # format: release sender receiver Clock Amount
             print("Releasing.")
             this_client.update_clock(one_event['foreign_clock'])
             this_client.update_events("receive release")
