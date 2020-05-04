@@ -142,7 +142,6 @@ def start_process(this_client, stop_signal):
 
 
         elif one_event['type'] == "release":
-            print("Releasing.")
             this_client.update_clock(one_event['foreign_clock'])
             this_client.update_events("receive release")
             
@@ -163,7 +162,7 @@ def try_visit_mutex(this_client):
     and all(this_client.one_request.local_set) \
     and P_queue.queue[0] \
     and P_queue.queue[0].sender == this_client.pid:
-        print('Visiting mutex.')
+        print('Releasing. Visiting mutex.')
         this_client.update_clock(0)
         this_client.update_events("release and visit mutex")
         # Release
@@ -212,7 +211,9 @@ if __name__ == '__main__':
 
     while True:
         one_event = input().split()
-        if one_event[0] == "print":
+        if len(one_event) == 0:
+            pass
+        elif one_event[0] == "print":
             if one_event[1] == "blockchain":
                 this_client.print_blockchain()
             elif one_event[1] == "clock":
