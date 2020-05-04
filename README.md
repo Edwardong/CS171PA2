@@ -13,7 +13,7 @@ Launch process:
 
 Input format:
 
-- `print`
+- `print blockchain|clock|balance|set|pqueue`
 
 - `local <event>` 
     
@@ -23,3 +23,20 @@ Input format:
 
   e.g. `send P1 qwerty`
 
+
+Message format:
+
+`sender, receiver, clock, payload`
+
+Payload format:
+
+`type: 'request'`
+
+`type: 'reply'`, 
+
+`type: 'release', transaction: [S,R,amount]`, 
+
+`type: 'test'`
+
+Event format
+`type, (foreign_clock,) (transaction,)`
