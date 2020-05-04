@@ -3,50 +3,28 @@ from collections import OrderedDict
 from request import Request
 from public import PORTS
 import socket
+from public import N
 
 class Client:
     # event_queue: OrderedDict[int, str]
     # transaction: [sender, receiver, amount]
 
     def __init__(self, pid):
-        self.local_balance = 10
+        self.balances = [10] * N
         self.pid = pid
         self.blockchain = []
         self.local_clock = 0
         self.event_queue = OrderedDict()
         self.started = False
-        #for testing
-        self.one_transaction = [1,2,7] # my pending transaction
-        self.one_request = Request(0, self.pid) # my request
+        self.one_transaction = None # my pending transaction
+        self.one_request = None # my request
+        self.held_replies = [] # requests held because the requester has not replied my request; list of requests
 
     # def get_pid(self):
     #     return self.pid
 
-    # Block chain functions
 
-    def get_transaction(self):
-        return self.one_transaction
-
-    def set_transaction(self, receiver, amount):
-        self.one_transaction.append(self.pid)
-        self.one_transaction.append(receiver)
-        self.one_transaction.append(amount)
-
-    def cleanup_one_transaction(self):
-        self.one_transaction = []
-
-    def check_valid(self, input):
-        return (self.local_balance + input) >= 0
-
-    def update_balance(self, input):
-        if self.check_valid(input):
-            self.local_balance += input
-            return True
-        else:
-            return False
-
-    def print_balance(self):
-        print("${}".format(self.local_balance))
+    # Mutex request functions
 
     def get_request(self):
         return self.one_request
@@ -54,12 +32,44 @@ class Client:
     def set_request(self):
         self.one_request = Request(self.local_clock, self.pid)
 
+
+    # Block chain functions
+
+    # def get_transaction(self):
+    #     return self.one_transaction
+
+    # def set_transaction(self, receiver, amount):
+    #     self.one_transaction.append(self.pid)
+    #     self.one_transaction.append(receiver)
+    #     self.one_transaction.append(amount)
+
+    # def cleanup_one_transaction(self):
+    #     self.one_transaction = []
+
+    def check_valid(self, input):
+        return (self.balances[self.pid] + input) >= 0
+
+    # def update_balance(self, input):
+    #     if self.check_valid(input):
+    #         self.local_balance += input
+    #         return True
+    #     else:
+    #         return False
+
+    def print_balance(self):
+        print("P1 ${} | P2 ${} | P3 ${}".format(*self.balances))
+
     def update_blockchain(self, transaction):
         self.blockchain.append(transaction)
+        self.balances[transaction[0]] -= transaction[2]
+        self.balances[transaction[1]] += transaction[2]
 
     def print_blockchain(self):
-        p = [tuple("P" + str(item[i]) if i < 2 else "$" + str(item[i]) for i in range(len(item))) for item in self.blockchain]
-        print(p)
+        if len(self.blockchain) == 0:
+            print("empty blockchain")
+        for item in self.blockchain:
+            print("P{} -> P{} ${}".format(*item))
+
 
     # Lamport Clock functions
 
@@ -102,4 +112,4 @@ class Client:
         }
         import pickle
         s.send(pickle.dumps(msg))
-        print("msg sent", msg)
+        # print("msg sent", msg)

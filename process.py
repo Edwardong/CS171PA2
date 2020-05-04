@@ -33,18 +33,16 @@ def start_listen(port, stop_signal):
         try:
             c, addr = s.accept()
             data = c.recv(1024)
-            # shared_queue.put("recv " + data.decode('utf-8'))
             # Read data
             import pickle
             msg = pickle.loads(data)
-            print("msg received", msg)
+            # print("msg received", msg)
             event = {
                 'type': msg['payload']['type'],
                 'sender': msg['sender'],
                 'foreign_clock': msg['clock'],
                 'transaction': msg['payload'].get('transaction', None)
             }
-            print("event", event)
             shared_queue.put(event)
             c.close()
         except Exception:
@@ -77,17 +75,20 @@ def start_process(this_client, stop_signal):
             amount = int(one_event['args'][1])
 
             # Check pending transaction
-            # TODO
+            if this_client.one_transaction:
+                this_client.update_events("failed to transfer")
+                print('Failure: There is a pending transaction.')
+                continue
 
             # Check balance
             if not this_client.check_valid(-amount):
                 this_client.update_events("failed to transfer")
-                print("You don't have enough balance")
+                print("Failure: You don't have enough balance")
                 continue
         
             #this part ↑ has been tested
             
-            this_client.set_transaction(receiver,amount)
+            this_client.one_transaction = [this_client.pid, receiver, amount]
 
             # Create request
             print("requesting")
@@ -106,38 +107,31 @@ def start_process(this_client, stop_signal):
                         'type': 'request',
                     })
 
-            #request_queue.put(this_client.get_request())
-
-            # TO-DO: send the request to Network node and Network node would broadcast
-            # TO-DO: send_request(request)
 
         # this part ↓ has been tested
         elif one_event['type'] == "reply":
             # 这里是我收到了 "reply", 我是原本发 "request" 的人
             # format: reply Pn Pm Clock (Pn is the one receives "request" and sends back "reply")
             # Record this reply
-            from_pid = one_event['sender']
+            sender = one_event['sender']
             this_client.update_clock(one_event['foreign_clock'])
-            this_client.update_events("receive reply from " + str(from_pid))
-            this_client.get_request().update_local_set(from_pid)
-            print('local_set', this_client.one_request.local_set)
+            this_client.update_events("receive reply from " + str(sender))
+            this_client.get_request().update_local_set(sender)
         # this part ↑ has been tested
 
-            # Try visit mutex
-            # TODO
-            if all(this_client.one_request.local_set) and P_queue.queue[0].sender == this_client.pid:
-                print('all collected')
-                # Release
-                for receiver_pid in range(N):
-                    if receiver_pid != this_client.pid:
-                        this_client.send_msg(receiver_pid, {
-                            'type': 'release',
-                            'transaction': this_client.one_transaction
-                        })
-                
-
             # If there's a held-reply for that process, sent it 
-            # TODO
+            for index, request in enumerate(this_client.held_replies):
+                if request.sender == sender:
+                    # Let go of that reply
+                    this_client.held_replies.pop(index)
+                    this_client.update_clock(0)
+                    this_client.update_events("send back one reply to " + str(requester_pid))
+                    this_client.send_msg(sender, {'type': 'reply'})
+                    break
+    
+            # Try visit mutex
+            try_visit_mutex(this_client)
+
 
 
         # this part ↓ has been tested
@@ -151,35 +145,28 @@ def start_process(this_client, stop_signal):
             new_request = Request(requester_clock, requester_pid)
             P_queue.put(new_request)
 
-            # Check time, compare with my request
-            # TODO
-
-        # this part ↑ has been tested
-
-            # TODO: send "reply" msg back to the sender
-            this_client.update_clock(0)
-            this_client.update_events("send back one reply to " + str(requester_pid))
-            this_client.send_msg(requester_pid, {'type': 'reply'})
+            # Check time, hold reply if later then my request
+            if this_client.one_request and this_client.one_request < new_request:
+                this_client.held_replies.append(new_request)
+            else:
+                # Send "reply" msg back to the requester
+                this_client.update_clock(0)
+                this_client.update_events("send back one reply to " + str(requester_pid))
+                this_client.send_msg(requester_pid, {'type': 'reply'})
 
 
         # this part ↓ has been tested
         elif one_event['type'] == "release":
             # format: release sender receiver Clock Amount
             this_client.update_clock(one_event['foreign_clock'])
-            this_client.update_events("receive release from")
+            this_client.update_events("receive release")
             
-            # Pop P_queue
             P_queue.get()
-
-            # Update blockchain
             this_client.update_blockchain(one_event['transaction'])
-            if one_event['transaction'][1] == this_client.pid:
-                this_client.update_balance(one_event['transaction'][2])
         
+            try_visit_mutex(this_client)
+
         # this part ↑ has been tested
-            
-            # Try visit mutex
-            # TODO
             
         elif one_event['type'] == "looptest":
             this_client.update_clock(0)
@@ -187,44 +174,26 @@ def start_process(this_client, stop_signal):
             this_client.send_msg(this_client.pid, {'type': 'test'})
 
 
-# TO-DO
-def send_request(request):
-    return
-
-# TO-DO
-def send_reply(local_clock, local_pid):
-    return
-
-def add_block(this_client,stop_signal):
-    while True:
-        if stop_signal():
-            break
-        else:
-            pass
-        if P_queue.empty():
-            continue
-        if not P_queue.queue[0].sender == this_client.pid or not this_client.get_request().get_local_set() == GLOBALSET:
-            continue
-        else:
-            # this part ↓ has been tested
-            request = P_queue.get()
-            print("After popping out the first element in P_queue: clock: {}, pid:{}".format(request.local_clock,request.sender))
-            this_client.get_request().init_local_set()
-            transaction = this_client.get_transaction()
-            print("before consuming the transaction: {}".format(transaction))
-            sender = transaction[0]
-            receiver = transaction[1]
-            amount = int(transaction[2])
-            this_client.cleanup_one_transaction()
-            print("cleanup the transaction: {}".format(this_client.get_transaction()))
-            if this_client.update_balance(-amount):
-                this_client.update_blockchain(transaction)
-            else:
-                print("invalid transaction")
-            msg = "release p" + str(sender)+ " " + str(receiver) + " " + str(amount)
-            print("broadcasting message: " + msg)
-            # this part ↑ has been tested
-            # TO-DO: broadcast msg: "release sender_pid receiver_pid amount"
+def try_visit_mutex(this_client):
+    if this_client.one_request \
+    and all(this_client.one_request.local_set) \
+    and P_queue.queue[0] \
+    and P_queue.queue[0].sender == this_client.pid:
+        print('Visiting mutex.')
+        this_client.update_clock(0)
+        this_client.update_events("release and visit mutex")
+        # Release
+        for receiver_pid in range(N):
+            if receiver_pid != this_client.pid:
+                this_client.send_msg(receiver_pid, {
+                    'type': 'release',
+                    'transaction': this_client.one_transaction
+                })
+        this_client.update_blockchain(this_client.one_transaction)
+        # Clean up
+        P_queue.get()
+        this_client.one_transaction = None
+        this_client.one_request = None
 
 
 
@@ -241,8 +210,7 @@ if __name__ == '__main__':
     process_stop = False
     listen_stop = False
 
-    #for testing:
-    #P_queue.put(Request(1,"p1"))
+
     # we might not need these here
     try:
         port = PORTS[this_pid]
@@ -287,7 +255,7 @@ if __name__ == '__main__':
     print("stop tracking keyboard input, trying to join process_thread")
     process_stop = True
     process_thread.join()
-    add_block_thread.join()
+    # add_block_thread.join()
 
     listen_stop = True
     print("trying to join listen_thread")
